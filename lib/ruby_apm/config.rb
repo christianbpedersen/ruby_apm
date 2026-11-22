@@ -1,8 +1,8 @@
 require "shellwords"
 
-module NewFenic
+module RubyAPM
   class Config
-    # Where the NewFenic server lives and how this app identifies itself.
+    # Where the RubyAPM server lives and how this app identifies itself.
     attr_accessor :endpoint, :api_key, :app_name, :environment, :host
 
     # Master switch. Defaults to on when an api_key is present.
@@ -61,14 +61,19 @@ module NewFenic
       @revision ||= detect_revision
     end
 
+    # Reads RUBY_APM_<name>, falling back to the pre-rename NEW_FENIC_<name>.
+    def self.env(name)
+      [ENV["RUBY_APM_#{name}"], ENV["NEW_FENIC_#{name}"]].find { |v| v && !v.empty? }
+    end
+
     def initialize
-      @endpoint = ENV.fetch("NEW_FENIC_ENDPOINT", "http://localhost:4400")
-      @api_key = ENV["NEW_FENIC_API_KEY"]
-      @app_name = ENV["NEW_FENIC_APP_NAME"]
-      @environment = ENV["NEW_FENIC_ENV"] || ENV["RAILS_ENV"] || ENV["RACK_ENV"] || "development"
+      @endpoint = self.class.env("ENDPOINT") || "http://localhost:4400"
+      @api_key = self.class.env("API_KEY")
+      @app_name = self.class.env("APP_NAME")
+      @environment = self.class.env("ENV") || ENV["RAILS_ENV"] || ENV["RACK_ENV"] || "development"
       @host = Socket.gethostname rescue "unknown"
       @enabled = nil
-      @flush_interval = Float(ENV.fetch("NEW_FENIC_FLUSH_INTERVAL", 10))
+      @flush_interval = Float(self.class.env("FLUSH_INTERVAL") || 10)
       @apdex_t = 500.0
       @trace_threshold = 300.0
       @max_traces_per_flush = 20
@@ -98,7 +103,7 @@ module NewFenic
     end
 
     def detect_revision
-      env = ENV["NEW_FENIC_REVISION"] || ENV["GIT_REV"] || ENV["HEROKU_SLUG_COMMIT"] || ENV["RENDER_GIT_COMMIT"]
+      env = self.class.env("REVISION") || ENV["GIT_REV"] || ENV["HEROKU_SLUG_COMMIT"] || ENV["RENDER_GIT_COMMIT"]
       return env if env && !env.empty?
 
       root = defined?(Rails.root) && Rails.root ? Rails.root.to_s : Dir.pwd

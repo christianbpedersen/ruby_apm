@@ -1,4 +1,4 @@
-module NewFenic
+module RubyAPM
   # Process-level health sampled once per flush: memory, GC, CPU,
   # allocations, threads and the ActiveRecord connection pool. Counters are
   # sent as deltas since the previous sample so the server can sum them.
@@ -9,7 +9,7 @@ module NewFenic
     end
 
     def sample
-      now = NewFenic.clock
+      now = RubyAPM.clock
       gc = GC.stat
       current = {
         gc_count: gc[:count], gc_major: gc[:major_gc_count], gc_time: gc[:time].to_f,

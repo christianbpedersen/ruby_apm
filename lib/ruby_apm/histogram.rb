@@ -1,4 +1,4 @@
-module NewFenic
+module RubyAPM
   # Geometric latency histogram shared by agent and server: bucket i holds
   # durations in (BASE**(i-1), BASE**i] milliseconds, bucket 0 holds <= 1ms.
   # 56 buckets reach ~ 200s, which is plenty for request latency.

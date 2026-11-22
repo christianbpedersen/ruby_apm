@@ -1,6 +1,6 @@
 require "digest/md5"
 
-module NewFenic
+module RubyAPM
   # Normalizes SQL so that statements differing only in literal values group
   # together, and so no customer data leaves the process.
   module SqlObfuscator

@@ -2,7 +2,7 @@ $LOAD_PATH.unshift File.expand_path("../lib", __dir__)
 require "minitest/autorun"
 require "active_record"
 require "rack"
-require "new_fenic"
+require "ruby_apm"
 
 ActiveRecord::Base.establish_connection(adapter: "sqlite3", database: ":memory:")
 ActiveRecord::Schema.verbose = false
@@ -15,23 +15,23 @@ end
 
 class Widget < ActiveRecord::Base; end
 
-NewFenic.config.enabled = true
-NewFenic.config.api_key = "test"
-NewFenic.config.app_name = "Test"
-NewFenic.start!
+RubyAPM.config.enabled = true
+RubyAPM.config.api_key = "test"
+RubyAPM.config.app_name = "Test"
+RubyAPM.start!
 
-class NewFenicTest < Minitest::Test
+class RubyAPMTest < Minitest::Test
   def setup
-    NewFenic.aggregator.drain
-    NewFenic.aggregator.take_pending
+    RubyAPM.aggregator.drain
+    RubyAPM.aggregator.take_pending
   end
 
   def run_request(app, path = "/widgets")
-    NewFenic::Middleware.new(app).call(Rack::MockRequest.env_for(path))
+    RubyAPM::Middleware.new(app).call(Rack::MockRequest.env_for(path))
   end
 
   def drained
-    buckets, traces = NewFenic.aggregator.drain
+    buckets, traces = RubyAPM.aggregator.drain
     [buckets.values.first, traces]
   end
 end

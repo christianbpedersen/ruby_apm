@@ -1,7 +1,7 @@
 require "test_helper"
 require "tmpdir"
 
-class AutoInstrumentTest < NewFenicTest
+class AutoInstrumentTest < RubyAPMTest
   def test_wraps_public_methods_of_classes_defined_under_the_paths
     Dir.mktmpdir do |root|
       FileUtils.mkdir_p(File.join(root, "app/services"))
@@ -16,11 +16,11 @@ class AutoInstrumentTest < NewFenicTest
       RUBY
       load File.join(root, "app/services/tax_calculator.rb")
 
-      count = NewFenic::MethodTracer.auto_instrument(["app/services"], root)
+      count = RubyAPM::MethodTracer.auto_instrument(["app/services"], root)
       assert_equal 3, count # total, vat, .rate_for; private methods are left alone
 
       run_request(lambda do |_|
-        NewFenic.set_transaction_name("Tax#show")
+        RubyAPM.set_transaction_name("Tax#show")
         assert_equal 125.0, TaxCalculator.new.total(100)
         assert_equal 0.25, TaxCalculator.rate_for("DK")
         [200, {}, []]
@@ -30,7 +30,7 @@ class AutoInstrumentTest < NewFenicTest
       assert_includes names, "Custom/TaxCalculator#total"
       assert_includes names, "Custom/TaxCalculator#vat"
       assert_includes names, "Custom/TaxCalculator.rate_for"
-      assert_equal 0, NewFenic::MethodTracer.auto_instrument(["app/services"], root), "idempotent"
+      assert_equal 0, RubyAPM::MethodTracer.auto_instrument(["app/services"], root), "idempotent"
     end
   end
 end

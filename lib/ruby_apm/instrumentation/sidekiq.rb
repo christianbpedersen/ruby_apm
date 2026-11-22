@@ -1,4 +1,4 @@
-module NewFenic
+module RubyAPM
   module Instrumentation
     # Native Sidekiq workers (ActiveJob on Sidekiq is named after the wrapped
     # job class, so both report as the same transaction).
@@ -26,7 +26,7 @@ module NewFenic
             txn.finish_segment(segment)
             Transaction.current = nil
             txn.finish
-            NewFenic.record(txn)
+            RubyAPM.record(txn)
           end
         end
       end

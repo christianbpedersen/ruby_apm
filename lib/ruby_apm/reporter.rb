@@ -5,7 +5,7 @@ require "stringio"
 require "msgpack"
 require "securerandom"
 
-module NewFenic
+module RubyAPM
   # Background thread that periodically drains the aggregator and POSTs one
   # gzipped MessagePack document to the server. Restarts itself after fork
   # (Puma cluster, Unicorn, Sidekiq swarm) because threads do not survive it.
@@ -42,7 +42,7 @@ module NewFenic
         end
         @pid = Process.pid
         @thread = Thread.new { run }
-        @thread.name = "new_fenic-reporter" if @thread.respond_to?(:name=)
+        @thread.name = "ruby_apm-reporter" if @thread.respond_to?(:name=)
         @thread.abort_on_exception = false
         @thread.report_on_exception = false
       end
@@ -93,7 +93,7 @@ module NewFenic
         "v" => PROTOCOL_VERSION, "agent" => VERSION, "app" => @config.app_name, "env" => @config.environment,
         "host" => @config.host, "pid" => Process.pid, "sent_at" => Time.now.to_f.round(3),
         "rails" => (defined?(Rails.version) ? Rails.version : nil), "ruby" => RUBY_VERSION,
-        "apdex_t" => @config.apdex_t, "revision" => @config.revision, "booted_at" => NewFenic.booted_at,
+        "apdex_t" => @config.apdex_t, "revision" => @config.revision, "booted_at" => RubyAPM.booted_at,
         "buckets" => wire_buckets, "traces" => traces,
         "slow_queries" => slow_queries, "runtime" => runtime
       }
@@ -147,7 +147,7 @@ module NewFenic
       request["Content-Type"] = "application/msgpack"
       request["Content-Encoding"] = "gzip"
       request["Authorization"] = "Bearer #{@config.api_key}"
-      request["User-Agent"] = "new_fenic-ruby/#{VERSION}"
+      request["User-Agent"] = "ruby_apm-ruby/#{VERSION}"
       request.body = body
       response = http.request(request)
       return true if response.is_a?(Net::HTTPSuccess)
@@ -188,7 +188,7 @@ module NewFenic
     end
 
     def log(level, message)
-      @config.logger&.public_send(level, "[NewFenic] #{message}")
+      @config.logger&.public_send(level, "[RubyAPM] #{message}")
     end
   end
 end

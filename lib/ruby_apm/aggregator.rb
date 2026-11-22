@@ -1,4 +1,4 @@
-module NewFenic
+module RubyAPM
   # Folds finished transactions into per-minute buckets. The hot path holds the
   # mutex only while merging a handful of hashes; the reporter swaps the whole
   # state out in O(1) and serializes it without the lock.

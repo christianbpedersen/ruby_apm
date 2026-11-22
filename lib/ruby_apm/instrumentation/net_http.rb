@@ -1,6 +1,6 @@
 require "net/http"
 
-module NewFenic
+module RubyAPM
   module Instrumentation
     # Outbound HTTP made with Net::HTTP (and libraries built on it: Faraday's
     # default adapter, HTTParty, ActiveResource, most SDKs).

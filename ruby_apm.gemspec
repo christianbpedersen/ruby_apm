@@ -1,14 +1,14 @@
-require_relative "lib/new_fenic/version"
+require_relative "lib/ruby_apm/version"
 
 Gem::Specification.new do |spec|
-  spec.name = "new_fenic"
-  spec.version = NewFenic::VERSION
-  spec.authors = ["NewFenic"]
+  spec.name = "ruby_apm"
+  spec.version = RubyAPM::VERSION
+  spec.authors = ["RubyAPM"]
   spec.summary = "Rails-specific application performance monitoring agent"
   spec.description = "Instruments controllers, views, ActiveRecord, SQL, jobs, external HTTP and custom code, " \
-                     "aggregates in-process and ships compact batches to a NewFenic server."
+                     "aggregates in-process and ships compact batches to a RubyAPM server."
   spec.license = "MIT"
-  spec.homepage = "https://github.com/christianbpedersen/new_fenic"
+  spec.homepage = "https://github.com/christianbpedersen/ruby_apm"
   spec.metadata = { "source_code_uri" => spec.homepage }
   spec.required_ruby_version = ">= 3.1"
   spec.files = Dir["lib/**/*.rb", "README.md", "LICENSE"]

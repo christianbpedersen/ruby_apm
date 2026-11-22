@@ -1,4 +1,4 @@
-module NewFenic
+module RubyAPM
   module Instrumentation
     # graphql-ruby tracer. Without it every request is "GraphqlController#execute";
     # with it transactions are named after the operation and resolver time is
@@ -8,7 +8,7 @@ module NewFenic
     # by hand:
     #
     #   class AppSchema < GraphQL::Schema
-    #     trace_with NewFenic::Instrumentation::GraphQL::Trace
+    #     trace_with RubyAPM::Instrumentation::GraphQL::Trace
     #   end
     #
     # Leaf (scalar/enum) fields are not traced unless they opt in with
@@ -44,7 +44,7 @@ module NewFenic
             name_transaction(txn, multiplex.queries)
           else
             # GraphQL executed outside a request/job (e.g. a test or a script).
-            return NewFenic.in_transaction(GraphQL.transaction_name(multiplex.queries), type: :job) { super }
+            return RubyAPM.in_transaction(GraphQL.transaction_name(multiplex.queries), type: :job) { super }
           end
           GraphQL.segment("GraphQL/execute") { super }
         end
@@ -70,7 +70,7 @@ module NewFenic
         end
 
         def end_dataloader_source(source)
-          Transaction.current&.finish_segment(source, prune_below: NewFenic.config.graphql_field_trace_threshold)
+          Transaction.current&.finish_segment(source, prune_below: RubyAPM.config.graphql_field_trace_threshold)
           super
         end
 
@@ -127,7 +127,7 @@ module NewFenic
         begin
           yield
         ensure
-          txn.finish_segment(segment, prune_below: prune ? NewFenic.config.graphql_field_trace_threshold : nil)
+          txn.finish_segment(segment, prune_below: prune ? RubyAPM.config.graphql_field_trace_threshold : nil)
         end
       end
 

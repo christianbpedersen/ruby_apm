@@ -1,9 +1,9 @@
 require "test_helper"
 require "sidekiq"
-require "new_fenic/instrumentation/sidekiq"
+require "ruby_apm/instrumentation/sidekiq"
 
-class SidekiqTest < NewFenicTest
-  def server = NewFenic::Instrumentation::Sidekiq::ServerMiddleware.new
+class SidekiqTest < RubyAPMTest
+  def server = RubyAPM::Instrumentation::Sidekiq::ServerMiddleware.new
 
   def test_job_transaction_with_queue_time_and_db
     job = { "class" => "HardWorker", "jid" => "abc", "enqueued_at" => ((Time.now.to_f - 2) * 1000).to_i }
@@ -25,15 +25,15 @@ class SidekiqTest < NewFenicTest
   end
 
   def test_client_middleware_times_enqueue_inside_a_request
-    client = NewFenic::Instrumentation::Sidekiq::ClientMiddleware.new
-    run_request(->(_) { NewFenic.set_transaction_name("Orders#create"); client.call("Mailer", { "class" => "Mailer" }, "q", nil) { true }; [200, {}, []] })
+    client = RubyAPM::Instrumentation::Sidekiq::ClientMiddleware.new
+    run_request(->(_) { RubyAPM.set_transaction_name("Orders#create"); client.call("Mailer", { "class" => "Mailer" }, "q", nil) { true }; [200, {}, []] })
     bucket, = drained
     assert bucket.transactions[[:web, "Orders#create"]].segments.key?("Job/Mailer/enqueue")
   end
 
   def test_middleware_is_registered
-    NewFenic::Instrumentation::Sidekiq.install!
+    RubyAPM::Instrumentation::Sidekiq.install!
     chain = Sidekiq.default_configuration.client_middleware
-    assert chain.exists?(NewFenic::Instrumentation::Sidekiq::ClientMiddleware)
+    assert chain.exists?(RubyAPM::Instrumentation::Sidekiq::ClientMiddleware)
   end
 end

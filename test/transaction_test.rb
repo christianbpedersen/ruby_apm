@@ -1,14 +1,14 @@
 require "test_helper"
 
-class TransactionTest < NewFenicTest
+class TransactionTest < RubyAPMTest
   def test_exclusive_time_and_breakdown
-    txn = NewFenic::Transaction.new(type: :web, name: "A#b")
-    NewFenic::Transaction.current = txn
-    NewFenic.trace("Custom/outer") do
+    txn = RubyAPM::Transaction.new(type: :web, name: "A#b")
+    RubyAPM::Transaction.current = txn
+    RubyAPM.trace("Custom/outer") do
       sleep 0.02
-      NewFenic.trace("Custom/inner") { sleep 0.03 }
+      RubyAPM.trace("Custom/inner") { sleep 0.03 }
     end
-    NewFenic::Transaction.current = nil
+    RubyAPM::Transaction.current = nil
     txn.finish
 
     outer = txn.segments["Custom/outer"]
@@ -24,7 +24,7 @@ class TransactionTest < NewFenicTest
   end
 
   def test_unclosed_segments_are_closed_by_outer_finish
-    txn = NewFenic::Transaction.new(type: :web, name: "A#b")
+    txn = RubyAPM::Transaction.new(type: :web, name: "A#b")
     outer = Object.new
     txn.start_segment("Custom/outer", :custom, outer)
     txn.start_segment("Custom/leaked", :custom, Object.new)
@@ -35,15 +35,15 @@ class TransactionTest < NewFenicTest
   end
 
   def test_trace_tree_is_capped_but_metrics_are_complete
-    NewFenic.config.max_segments_per_trace = 5
-    txn = NewFenic::Transaction.new(type: :web, name: "A#b")
-    NewFenic::Transaction.current = txn
-    20.times { NewFenic.trace("Custom/x") {} }
-    NewFenic::Transaction.current = nil
+    RubyAPM.config.max_segments_per_trace = 5
+    txn = RubyAPM::Transaction.new(type: :web, name: "A#b")
+    RubyAPM::Transaction.current = txn
+    20.times { RubyAPM.trace("Custom/x") {} }
+    RubyAPM::Transaction.current = nil
     txn.finish
     assert_equal 20, txn.segments["Custom/x"].count
     assert_equal 5, txn.trace_wire[4].size
   ensure
-    NewFenic.config.max_segments_per_trace = 1500
+    RubyAPM.config.max_segments_per_trace = 1500
   end
 end

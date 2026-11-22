@@ -1,7 +1,7 @@
 require "test_helper"
 
 class SqlObfuscatorTest < Minitest::Test
-  def obf(sql) = NewFenic::SqlObfuscator.build(sql)
+  def obf(sql) = RubyAPM::SqlObfuscator.build(sql)
 
   def test_strips_literals_and_groups_in_lists
     s = obf(%(SELECT "users".* FROM "users" WHERE "users"."email" = 'bob@x.com' AND id IN (1, 2, 3) LIMIT 10))
@@ -32,7 +32,7 @@ class SqlObfuscatorTest < Minitest::Test
 end
 
 class SqlObfuscatorLeakTest < Minitest::Test
-  def obf(sql) = NewFenic::SqlObfuscator.build(sql).sql
+  def obf(sql) = RubyAPM::SqlObfuscator.build(sql).sql
 
   def test_comment_markers_inside_strings_do_not_leak
     assert_equal "SELECT * FROM u WHERE pw = ? AND id = ?", obf("SELECT * FROM u WHERE pw = 'hunter2 -- secret' AND id = 5")
@@ -56,8 +56,8 @@ class SqlObfuscatorLeakTest < Minitest::Test
 
   def test_large_statements_are_not_cached
     big = "INSERT INTO t (a) VALUES ('#{'x' * 10_000}')"
-    a = NewFenic::SqlObfuscator.call(big)
-    refute NewFenic::SqlObfuscator.instance_variable_get(:@cache).key?(big)
+    a = RubyAPM::SqlObfuscator.call(big)
+    refute RubyAPM::SqlObfuscator.instance_variable_get(:@cache).key?(big)
     assert_equal "INSERT INTO t (a) VALUES (?)", a.sql
   end
 end

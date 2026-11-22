@@ -1,4 +1,4 @@
-# NewFenic ingest protocol, v1
+# RubyAPM ingest protocol, v1
 
 Agents POST one document per flush (default every 10 s) to:
 

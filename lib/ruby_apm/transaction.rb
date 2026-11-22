@@ -1,11 +1,11 @@
-module NewFenic
+module RubyAPM
   # One unit of work: a web request or a background job. Lives in a
   # fiber-local slot while it runs and is handed to the aggregator when it
   # finishes. Metrics are accumulated as segments close, so the trace tree is
   # only an optional side product and can be truncated without losing totals.
   class Transaction
     CATEGORIES = %i[middleware controller view activerecord database external cache custom job graphql].freeze
-    KEY = :__new_fenic_transaction
+    KEY = :__ruby_apm_transaction
 
     # name, category, start offset (ms), duration (ms), children, extra attrs
     class Segment
@@ -91,13 +91,13 @@ module NewFenic
       Thread.current[KEY] = txn
     end
 
-    def initialize(type:, name: nil, uri: nil, config: NewFenic.config)
+    def initialize(type:, name: nil, uri: nil, config: RubyAPM.config)
       @type = type
       @name = name
       @uri = uri
       @config = config
       @started_at = Time.now.to_f
-      @start = NewFenic.clock
+      @start = RubyAPM.clock
       @segments = {}
       @sql = {}
       @breakdown = Hash.new(0.0)
@@ -115,7 +115,7 @@ module NewFenic
 
     def start_segment(name, category, token = nil)
       parent = @stack.last
-      segment = Segment.new(name, category, NewFenic.clock, token, parent)
+      segment = Segment.new(name, category, RubyAPM.clock, token, parent)
       if parent.in_tree && @segment_count < @max_segments
         @segment_count += 1
         segment.in_tree = true
@@ -140,7 +140,7 @@ module NewFenic
       return unless index&.positive?
 
       segment = @stack.delete_at(index)
-      close(segment, NewFenic.clock)
+      close(segment, RubyAPM.clock)
       segment.attrs = attrs if attrs
       prune(segment) if prune_below && segment.in_tree && segment.children.nil? && segment.duration < prune_below
       segment
@@ -158,7 +158,7 @@ module NewFenic
       segments = @stack.drop(1).select { |seg| seg.fiber.equal?(fiber) }
       return if segments.empty?
 
-      now = NewFenic.clock
+      now = RubyAPM.clock
       segments.each do |seg|
         seg.accumulated += now - seg.active_since
         seg.active_since = nil
@@ -171,7 +171,7 @@ module NewFenic
       segments = @suspended&.delete(fiber)
       return unless segments
 
-      now = NewFenic.clock
+      now = RubyAPM.clock
       segments.each { |seg| seg.active_since = now }
       @stack.concat(segments)
     end
@@ -205,7 +205,7 @@ module NewFenic
     end
 
     def finish
-      now = NewFenic.clock
+      now = RubyAPM.clock
       @suspended&.each_value { |segs| segs.each { |seg| close(seg, now) } }
       @suspended = nil
       close(@stack.pop, now) while @stack.size > 1

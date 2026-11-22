@@ -1,4 +1,4 @@
-module NewFenic
+module RubyAPM
   # Runs EXPLAIN for sampled slow SELECTs on the reporter thread, with a
   # connection checked out of the same pool the query used. Literal values
   # in filter conditions are stripped from the plan before it is shipped.

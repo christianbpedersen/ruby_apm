@@ -1,6 +1,6 @@
 require "test_helper"
 require "graphql"
-NewFenic::Instrumentation::GraphQL.install!
+RubyAPM::Instrumentation::GraphQL.install!
 
 class WidgetSource < GraphQL::Dataloader::Source
   def fetch(ids)
@@ -29,12 +29,12 @@ class TestSchema < GraphQL::Schema
   use GraphQL::Dataloader
 end
 
-class GraphqlTest < NewFenicTest
+class GraphqlTest < RubyAPMTest
   def test_operation_naming_layer_and_fields
     Widget.create!(name: "g", price: 1) if Widget.count.zero?
     setup
     app = lambda do |_env|
-      NewFenic.set_transaction_name("GraphqlController#execute")
+      RubyAPM.set_transaction_name("GraphqlController#execute")
       result = TestSchema.execute("query WidgetList { widgets { id name sibling { name } } }")
       raise result["errors"].inspect if result["errors"]
       [200, {}, []]

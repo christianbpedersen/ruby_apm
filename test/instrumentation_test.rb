@@ -1,21 +1,21 @@
 require "test_helper"
 
 class Pricing
-  include NewFenic::MethodTracer
+  include RubyAPM::MethodTracer
   def quote(n, discount: 0) = n * 2 - discount
   trace_method :quote
   def self.region = "eu"
   trace_class_method :region
 end
 
-class InstrumentationTest < NewFenicTest
+class InstrumentationTest < RubyAPMTest
   def test_web_request_records_ar_db_and_custom_segments
     Widget.delete_all
     3.times { |i| Widget.create!(name: "w#{i}", price: i) }
     setup # discard writes above (they were outside a request anyway)
 
     app = lambda do |_env|
-      NewFenic.set_transaction_name("WidgetsController#index")
+      RubyAPM.set_transaction_name("WidgetsController#index")
       Widget.where("price >= ?", 0).to_a
       Widget.find(Widget.first.id)
       assert_equal 9, Pricing.new.quote(5, discount: 1)
@@ -45,7 +45,7 @@ class InstrumentationTest < NewFenicTest
     Widget.create!(name: "n1", price: 1) if Widget.count.zero?
     setup
     app = lambda do |_env|
-      NewFenic.set_transaction_name("WidgetsController#n1")
+      RubyAPM.set_transaction_name("WidgetsController#n1")
       12.times { |i| Widget.where(id: i).first }
       [200, {}, []]
     end
@@ -57,8 +57,8 @@ class InstrumentationTest < NewFenicTest
   end
 
   def test_errors_and_traces
-    NewFenic.config.trace_threshold = 0
-    app = ->(_env) { NewFenic.set_transaction_name("BoomController#show"); raise ArgumentError, "bad id 42" }
+    RubyAPM.config.trace_threshold = 0
+    app = ->(_env) { RubyAPM.set_transaction_name("BoomController#show"); raise ArgumentError, "bad id 42" }
     assert_raises(ArgumentError) { run_request(app) }
     bucket, traces = drained
     stat = bucket.transactions[[:web, "BoomController#show"]]
@@ -68,7 +68,7 @@ class InstrumentationTest < NewFenicTest
     assert_equal 1, traces.size
     assert_equal "ArgumentError", traces.first["error"]
   ensure
-    NewFenic.config.trace_threshold = 300.0
+    RubyAPM.config.trace_threshold = 300.0
   end
 
   def test_ignored_paths_and_unnamed_requests
@@ -79,7 +79,7 @@ class InstrumentationTest < NewFenicTest
   end
 
   def test_in_transaction_for_background_work
-    NewFenic.in_transaction("Rake/import") { Widget.count }
+    RubyAPM.in_transaction("Rake/import") { Widget.count }
     bucket, = drained
     stat = bucket.transactions[[:job, "Rake/import"]]
     assert_equal 1, stat.count
@@ -87,8 +87,8 @@ class InstrumentationTest < NewFenicTest
   end
 
   def test_reporter_payload_roundtrip
-    run_request(->(_) { NewFenic.set_transaction_name("X#y"); Widget.count; [200, {}, []] })
-    reporter = NewFenic.reporter
+    run_request(->(_) { RubyAPM.set_transaction_name("X#y"); Widget.count; [200, {}, []] })
+    reporter = RubyAPM.reporter
     sent = nil
     reporter.define_singleton_method(:post) { |body| sent = body; true }
     assert reporter.flush
@@ -102,8 +102,8 @@ class InstrumentationTest < NewFenicTest
   end
 
   def test_failed_flush_is_retried
-    run_request(->(_) { NewFenic.set_transaction_name("Retry#me"); [200, {}, []] })
-    reporter = NewFenic.reporter
+    run_request(->(_) { RubyAPM.set_transaction_name("Retry#me"); [200, {}, []] })
+    reporter = RubyAPM.reporter
     calls = []
     reporter.define_singleton_method(:post) { |body| calls << body; calls.size > 1 }
     refute reporter.flush
@@ -115,12 +115,12 @@ class InstrumentationTest < NewFenicTest
   end
 end
 
-class SlowQueryTest < NewFenicTest
+class SlowQueryTest < RubyAPMTest
   def test_slow_queries_are_sampled_with_plan_and_histogram
-    NewFenic.config.slow_query_threshold = 0
-    NewFenic.config.sql_backtrace_threshold = 0
-    run_request(->(_) { NewFenic.set_transaction_name("Slow#q"); Widget.where("price > ?", 5).to_a; [200, {}, []] })
-    reporter = NewFenic.reporter
+    RubyAPM.config.slow_query_threshold = 0
+    RubyAPM.config.sql_backtrace_threshold = 0
+    run_request(->(_) { RubyAPM.set_transaction_name("Slow#q"); Widget.where("price > ?", 5).to_a; [200, {}, []] })
+    reporter = RubyAPM.reporter
     sent = nil
     reporter.define_singleton_method(:post) { |body| sent = body; true }
     reporter.flush
@@ -135,13 +135,13 @@ class SlowQueryTest < NewFenicTest
     assert_equal 1, sql["hist"].values.sum
     assert_equal 1, sql["slow"]
   ensure
-    NewFenic.config.slow_query_threshold = 100.0
-    NewFenic.config.sql_backtrace_threshold = 10.0
+    RubyAPM.config.slow_query_threshold = 100.0
+    RubyAPM.config.sql_backtrace_threshold = 10.0
     reporter.singleton_class.send(:remove_method, :post)
   end
 
   def test_plan_obfuscation_keeps_costs
-    e = NewFenic::Explainer.new(NewFenic.config)
+    e = RubyAPM::Explainer.new(RubyAPM.config)
     plan = "Seq Scan on users  (cost=0.00..35.50 rows=10 width=4)\n  Filter: ((email)::text = 'bob@x.com'::text AND (age > 42))"
     out = e.obfuscate_plan(plan)
     assert_includes out, "cost=0.00..35.50 rows=10"
@@ -150,24 +150,24 @@ class SlowQueryTest < NewFenicTest
   end
 end
 
-class IgnoredErrorTest < NewFenicTest
+class IgnoredErrorTest < RubyAPMTest
   class NotFound < StandardError; end
 
   def test_expected_errors_are_not_counted
-    NewFenic.config.ignored_errors << "IgnoredErrorTest::NotFound"
-    app = ->(_) { NewFenic.set_transaction_name("Missing#show"); NewFenic.notice_error(NotFound.new("x")); [404, {}, []] }
+    RubyAPM.config.ignored_errors << "IgnoredErrorTest::NotFound"
+    app = ->(_) { RubyAPM.set_transaction_name("Missing#show"); RubyAPM.notice_error(NotFound.new("x")); [404, {}, []] }
     run_request(app)
     bucket, = drained
     assert_equal 0, bucket.transactions[[:web, "Missing#show"]].errors
     assert_empty bucket.errors
   ensure
-    NewFenic.config.ignored_errors.delete("IgnoredErrorTest::NotFound")
+    RubyAPM.config.ignored_errors.delete("IgnoredErrorTest::NotFound")
   end
 end
 
-class RuntimeTest < NewFenicTest
+class RuntimeTest < RubyAPMTest
   def test_runtime_sample_is_a_delta_after_the_first_call
-    sampler = NewFenic::RuntimeSampler.new
+    sampler = RubyAPM::RuntimeSampler.new
     assert_nil sampler.sample
     Array.new(10_000) { Object.new }
     s = sampler.sample
@@ -177,22 +177,22 @@ class RuntimeTest < NewFenicTest
   end
 
   def test_traces_carry_gc_and_allocations
-    NewFenic.config.trace_threshold = 0
-    run_request(->(_) { NewFenic.set_transaction_name("Alloc#y"); Array.new(5_000) { "x" * 10 }; [200, {}, []] })
+    RubyAPM.config.trace_threshold = 0
+    run_request(->(_) { RubyAPM.set_transaction_name("Alloc#y"); Array.new(5_000) { "x" * 10 }; [200, {}, []] })
     _, traces = drained
     attrs = traces.find { |t| t["tx"] == "Alloc#y" }["attributes"]
     assert_operator attrs["allocations"], :>=, 5_000
     assert attrs.key?("gc_ms")
   ensure
-    NewFenic.config.trace_threshold = 300.0
+    RubyAPM.config.trace_threshold = 300.0
   end
 end
 
-class ExplainerPoolTest < NewFenicTest
+class ExplainerPoolTest < RubyAPMTest
   FakePool = Struct.new(:stat)
 
   def test_skips_explain_when_pool_has_no_free_connection
-    e = NewFenic::Explainer.new(NewFenic.config)
+    e = RubyAPM::Explainer.new(RubyAPM.config)
     busy = FakePool.new({ size: 2, connections: 2, busy: 2, idle: 0 })
     q = { key: "k", raw_sql: "SELECT 1", duration: 500, pool: busy }
     e.explain([q])
@@ -200,16 +200,16 @@ class ExplainerPoolTest < NewFenicTest
   end
 end
 
-class ReporterRobustnessTest < NewFenicTest
+class ReporterRobustnessTest < RubyAPMTest
   def test_unserializable_attribute_does_not_lose_metrics
-    NewFenic.config.trace_threshold = 0
+    RubyAPM.config.trace_threshold = 0
     run_request(lambda do |_|
-      NewFenic.set_transaction_name("Odd#attr")
-      NewFenic.add_attribute("when", Time.at(0))
-      NewFenic.add_attribute("obj", Object.new)
+      RubyAPM.set_transaction_name("Odd#attr")
+      RubyAPM.add_attribute("when", Time.at(0))
+      RubyAPM.add_attribute("obj", Object.new)
       [200, {}, []]
     end)
-    reporter = NewFenic.reporter
+    reporter = RubyAPM.reporter
     sent = nil
     reporter.define_singleton_method(:post) { |body| sent = body; true }
     assert reporter.flush
@@ -219,13 +219,13 @@ class ReporterRobustnessTest < NewFenicTest
     trace = doc["traces"].find { |t| t["tx"] == "Odd#attr" }
     assert_kind_of String, trace["attributes"]["when"]
   ensure
-    NewFenic.config.trace_threshold = 300.0
+    RubyAPM.config.trace_threshold = 300.0
     reporter.singleton_class.send(:remove_method, :post)
   end
 
   def test_retried_buckets_keep_their_id
-    run_request(->(_) { NewFenic.set_transaction_name("Retry#id"); [200, {}, []] })
-    reporter = NewFenic.reporter
+    run_request(->(_) { RubyAPM.set_transaction_name("Retry#id"); [200, {}, []] })
+    reporter = RubyAPM.reporter
     bodies = []
     reporter.define_singleton_method(:post) { |body| bodies << body; bodies.size > 1 }
     reporter.flush
@@ -238,7 +238,7 @@ class ReporterRobustnessTest < NewFenicTest
 
   def test_sql_min_is_per_execution
     Widget.create!(name: "m", price: 1) if Widget.count.zero?
-    run_request(->(_) { NewFenic.set_transaction_name("Min#sql"); 3.times { Widget.where(price: 1).to_a }; [200, {}, []] })
+    run_request(->(_) { RubyAPM.set_transaction_name("Min#sql"); 3.times { Widget.where(price: 1).to_a }; [200, {}, []] })
     bucket, = drained
     agg = bucket.sql.values.find { |a| a.statement.sql.include?('"price" = ?') }
     assert_operator agg.min, :<=, agg.total / agg.count
@@ -247,21 +247,21 @@ end
 
 class DisabledAgentTest < Minitest::Test
   def test_endpoint_with_a_path_prefix_keeps_it
-    reporter = NewFenic::Reporter.new(NewFenic::Config.new.tap { |c| c.endpoint = "http://newfenic.apm.svc.cluster.local/apm/" }, NewFenic.aggregator)
+    reporter = RubyAPM::Reporter.new(RubyAPM::Config.new.tap { |c| c.endpoint = "http://rubyapm.apm.svc.cluster.local/apm/" }, RubyAPM.aggregator)
     assert_equal "/apm/api/v1/ingest", reporter.send(:ingest_uri).path
-    reporter = NewFenic::Reporter.new(NewFenic::Config.new.tap { |c| c.endpoint = "http://localhost:4400" }, NewFenic.aggregator)
+    reporter = RubyAPM::Reporter.new(RubyAPM::Config.new.tap { |c| c.endpoint = "http://localhost:4400" }, RubyAPM.aggregator)
     assert_equal "/api/v1/ingest", reporter.send(:ingest_uri).path
   end
 
   def test_middleware_is_inert_when_the_agent_did_not_start
-    NewFenic.instance_variable_set(:@started, false)
+    RubyAPM.instance_variable_set(:@started, false)
     called = false
-    status, = NewFenic::Middleware.new(->(_) { called = true; [200, {}, []] }).call(Rack::MockRequest.env_for("/x"))
+    status, = RubyAPM::Middleware.new(->(_) { called = true; [200, {}, []] }).call(Rack::MockRequest.env_for("/x"))
     assert called
     assert_equal 200, status
-    assert_nil NewFenic::Transaction.current
-    assert NewFenic.aggregator.drain.first.empty?
+    assert_nil RubyAPM::Transaction.current
+    assert RubyAPM.aggregator.drain.first.empty?
   ensure
-    NewFenic.instance_variable_set(:@started, true)
+    RubyAPM.instance_variable_set(:@started, true)
   end
 end

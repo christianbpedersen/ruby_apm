@@ -32,17 +32,17 @@ plain = WORK
 run(plain, 300) # warm up
 base = run(plain, N)
 
-require "new_fenic"
-NewFenic.configure { |c| c.enabled = true; c.api_key = "bench"; c.app_name = "Bench"; c.flush_interval = 3600 }
-NewFenic.start!
+require "ruby_apm"
+RubyAPM.configure { |c| c.enabled = true; c.api_key = "bench"; c.app_name = "Bench"; c.flush_interval = 3600 }
+RubyAPM.start!
 # Never ship benchmark data anywhere (the reporter also flushes at exit).
-NewFenic.reporter.define_singleton_method(:post) { |_body| true }
-named = ->(env) { NewFenic.set_transaction_name("ItemsController#index"); WORK.call(env) }
-instrumented = NewFenic::Middleware.new(named)
+RubyAPM.reporter.define_singleton_method(:post) { |_body| true }
+named = ->(env) { RubyAPM.set_transaction_name("ItemsController#index"); WORK.call(env) }
+instrumented = RubyAPM::Middleware.new(named)
 run(instrumented, 300)
 with_agent = run(instrumented, N)
 
-reporter = NewFenic.reporter
+reporter = RubyAPM.reporter
 bytes = nil
 reporter.define_singleton_method(:post) { |body| bytes = body.bytesize; true }
 at_exit { reporter.define_singleton_method(:post) { |_body| true } }

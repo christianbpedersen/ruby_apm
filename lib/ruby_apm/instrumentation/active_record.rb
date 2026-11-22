@@ -1,4 +1,4 @@
-module NewFenic
+module RubyAPM
   module Instrumentation
     # Measures ActiveRecord as a whole (relation building, Arel compilation,
     # preloading, type casting, callbacks) around the SQL Rails already reports.

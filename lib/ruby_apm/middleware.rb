@@ -1,4 +1,4 @@
-module NewFenic
+module RubyAPM
   # Outermost middleware: opens the web transaction so middleware time, routing
   # and controller work are all measured, and records exceptions escaping Rails.
   class Middleware
@@ -9,8 +9,8 @@ module NewFenic
     def call(env)
       # The Railtie inserts this middleware in every environment; it does
       # nothing unless the agent actually started (enabled with an API key).
-      return @app.call(env) unless NewFenic.started?
-      return @app.call(env) if Transaction.current || NewFenic.config.ignored_path?(env["PATH_INFO"].to_s)
+      return @app.call(env) unless RubyAPM.started?
+      return @app.call(env) if Transaction.current || RubyAPM.config.ignored_path?(env["PATH_INFO"].to_s)
 
       txn = Transaction.new(type: :web, uri: env["PATH_INFO"])
       txn.queue_time = queue_time(env, txn.started_at)
@@ -28,7 +28,7 @@ module NewFenic
         txn.status ||= status.to_i if status
         txn.name ||= fallback_name(env, txn.status)
         txn.finish
-        NewFenic.record(txn)
+        RubyAPM.record(txn)
       end
     end
 

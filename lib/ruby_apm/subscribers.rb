@@ -1,7 +1,7 @@
 require "time"
 require "active_support/notifications"
 
-module NewFenic
+module RubyAPM
   # Turns Rails' own ActiveSupport::Notifications events into segments. Evented
   # listeners (start/finish) give us proper nesting without monkey patching.
   module Subscribers
@@ -95,7 +95,7 @@ module NewFenic
         statement = segment&.statement
         return unless statement
 
-        config = NewFenic.config
+        config = RubyAPM.config
         location = nil
         if segment.duration >= config.sql_backtrace_threshold
           frames = Subscribers.app_backtrace
@@ -151,7 +151,7 @@ module NewFenic
           txn.error ||= payload[:exception_object] if payload[:exception_object]
           Transaction.current = nil
           txn.finish
-          NewFenic.record(txn)
+          RubyAPM.record(txn)
         else
           super
         end
@@ -208,7 +208,7 @@ module NewFenic
       n = ActiveSupport::Notifications
       n.subscribe("process_action.action_controller", ProcessAction.new)
       n.subscribe("sql.active_record", Sql.new)
-      if NewFenic.config.instrument_instantiation
+      if RubyAPM.config.instrument_instantiation
         n.subscribe("instantiation.active_record", Segment.new(:activerecord) { |p| Names.get("ActiveRecord", p[:class_name], "instantiate") })
       end
       %w[template partial collection layout].each do |kind|
@@ -266,7 +266,7 @@ module NewFenic
     end
 
     def warn(error)
-      NewFenic.config.logger&.warn("[NewFenic] instrumentation error: #{error.class}: #{error.message}")
+      RubyAPM.config.logger&.warn("[RubyAPM] instrumentation error: #{error.class}: #{error.message}")
     end
   end
 end

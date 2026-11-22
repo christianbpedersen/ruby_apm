@@ -1,8 +1,8 @@
-module NewFenic
+module RubyAPM
   # Times individual methods as "Custom/<Class>#<method>" segments.
   #
   #   class PricingService
-  #     include NewFenic::MethodTracer
+  #     include RubyAPM::MethodTracer
   #     trace_method :quote
   #     trace_class_method :for_region, name: "Custom/Pricing/region lookup"
   #   end
@@ -30,8 +30,8 @@ module NewFenic
     # Prepends a module defining a same-named method that opens a segment and
     # calls super. Idempotent per (class, method).
     def wrap(klass, method_name, segment_name, category)
-      tracer = (klass.instance_variable_get(:@__new_fenic_tracer) ||
-                klass.instance_variable_set(:@__new_fenic_tracer, Module.new.tap { |m| klass.prepend(m) }))
+      tracer = (klass.instance_variable_get(:@__ruby_apm_tracer) ||
+                klass.instance_variable_set(:@__ruby_apm_tracer, Module.new.tap { |m| klass.prepend(m) }))
       return false if tracer.method_defined?(method_name) || tracer.private_method_defined?(method_name)
 
       visibility = if klass.private_method_defined?(method_name) then :private
