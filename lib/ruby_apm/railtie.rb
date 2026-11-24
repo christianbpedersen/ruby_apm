@@ -15,6 +15,8 @@ module RubyAPM
 
     config.after_initialize do |app|
       if RubyAPM.start!
+        require "ruby_apm/error_subscriber"
+        Rails.error.subscribe(RubyAPM::ErrorSubscriber.new) if Rails.respond_to?(:error) && Rails.error.respond_to?(:subscribe)
         unless RubyAPM.config.auto_instrument_paths.empty?
           # Classes must be loaded before their methods can be wrapped.
           Rails.application.eager_load! unless app.config.eager_load

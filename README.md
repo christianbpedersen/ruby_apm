@@ -8,7 +8,7 @@ every 10 seconds. Nothing is sent per request, and SQL literals never leave
 the process.
 
 ```ruby
-gem "ruby_apm", git: "https://github.com/christianbpedersen/ruby_apm.git", tag: "v0.2.0"
+gem "ruby_apm", git: "https://github.com/christianbpedersen/ruby_apm.git", tag: "v0.2.1"
 
 # config/initializers/ruby_apm.rb
 RubyAPM.configure do |c|

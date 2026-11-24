@@ -26,13 +26,31 @@ module RubyAPM
       ensure
         Transaction.current = nil
         txn.status ||= status.to_i if status
+        explain_server_error(env, txn)
         txn.name ||= fallback_name(env, txn.status)
         txn.finish
         RubyAPM.record(txn)
       end
     end
 
+    # Stands in for the exception when a request ends in a 5xx that nothing
+    # raised past this middleware: the app rescued it and rendered an error,
+    # or set the status itself. Grouped as "HTTP 500" etc.
+    ServerErrorResponse = Struct.new(:status) do
+      def to_s = "HTTP #{status}"
+      def message = "Responded #{status} without an exception reaching RubyAPM (rescued and rendered, or set by the app)"
+    end
+
     private
+
+    # Rails' ShowExceptions catches exceptions deeper in the stack, renders the
+    # error page and leaves the exception in the env; an app that rescues and
+    # renders a 500 itself may still have reported it through Rails.error.
+    def explain_server_error(env, txn)
+      return if txn.error || txn.status.to_i < 500
+
+      txn.error = env["action_dispatch.exception"] || txn.reported_error || ServerErrorResponse.new(txn.status.to_i)
+    end
 
     # Rack apps that are not Rails controllers (mounted engines, Sinatra, 404s).
     def fallback_name(env, status)

@@ -252,12 +252,27 @@ module RubyAPM
       entry = bucket.errors[key]
       unless entry
         return if bucket.errors.size >= MAX_ERROR_GROUPS
-        backtrace = error.respond_to?(:backtrace) ? Array(error.backtrace).first(MAX_BACKTRACE_LINES) : []
+        backtrace = error.respond_to?(:backtrace) ? self.class.trim_backtrace(error.backtrace) : []
         entry = bucket.errors[key] = { "tx_type" => txn.type.to_s, "tx" => name, "class" => klass,
                                        "message" => message, "backtrace" => backtrace, "count" => 0, "uri" => txn.uri }
       end
       entry["count"] += 1
       entry["last_at"] = txn.started_at.round(3)
+    end
+
+    BACKTRACE_HEAD = 8
+
+    # The top frames, then the app's own frames. Deep library stacks (Arel,
+    # GraphQL) would otherwise fill the limit before reaching the app code
+    # that caused the error.
+    def self.trim_backtrace(backtrace)
+      lines = Array(backtrace)
+      return lines if lines.size <= MAX_BACKTRACE_LINES
+
+      head = lines.first(BACKTRACE_HEAD)
+      own = lines.drop(BACKTRACE_HEAD).reject { |l| l.include?("/gems/") || l.include?("/vendor/") || l.start_with?("<internal:") }
+      omitted = lines.size - head.size - own.size
+      (head + (omitted.positive? ? ["… #{omitted} library frames omitted"] : []) + own).first(MAX_BACKTRACE_LINES)
     end
 
     def error_class(error)

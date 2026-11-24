@@ -77,6 +77,10 @@ module RubyAPM
     attr_accessor :name, :status, :uri, :queue_time, :duration, :ignored
     attr_reader :gc_ms, :allocations
     attr_reader :error
+    # An exception the app reported through Rails.error during this request.
+    # Used as the cause when the response is a 5xx but nothing was raised past
+    # the middleware.
+    attr_accessor :reported_error
 
     # Expected exceptions (see Config#ignored_errors) are not recorded as errors.
     def error=(error)

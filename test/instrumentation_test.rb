@@ -71,6 +71,40 @@ class InstrumentationTest < RubyAPMTest
     RubyAPM.config.trace_threshold = 300.0
   end
 
+  # 500s whose exception never reaches the middleware still get a cause.
+  def test_server_errors_without_an_escaping_exception
+    require "ruby_apm/error_subscriber"
+    shown = ->(env) { RubyAPM.set_transaction_name("Shown#x"); env["action_dispatch.exception"] = KeyError.new("caught by ShowExceptions"); [500, {}, []] }
+    reported = lambda do |_|
+      RubyAPM.set_transaction_name("Graphql#execute")
+      RubyAPM::ErrorSubscriber.new.report(ZeroDivisionError.new("rescued and reported"), handled: true, severity: :error, context: {})
+      [500, {}, []]
+    end
+    bare = ->(_) { RubyAPM.set_transaction_name("Bare#x"); [503, {}, []] }
+    fine = ->(_) { RubyAPM.set_transaction_name("Fine#x"); RubyAPM::ErrorSubscriber.new.report(IOError.new("retried"), handled: true, severity: :warning, context: {}); [200, {}, []] }
+    [shown, reported, bare, fine].each { |app| run_request(app) }
+
+    bucket, = drained
+    by_tx = bucket.errors.values.to_h { |e| [e["tx"], e] }
+    assert_equal "KeyError", by_tx["Shown#x"]["class"]
+    assert_equal "ZeroDivisionError", by_tx["Graphql#execute"]["class"]
+    assert_equal "HTTP 503", by_tx["Bare#x"]["class"]
+    assert_match "without an exception reaching RubyAPM", by_tx["Bare#x"]["message"]
+    refute by_tx.key?("Fine#x"), "a handled report on a 200 is not an error"
+    assert_equal [1, 1, 1, 0], %w[Shown#x Graphql#execute Bare#x Fine#x].map { |n| bucket.transactions[[:web, n]].errors }
+  end
+
+  def test_backtraces_keep_app_frames_below_deep_library_stacks
+    deep = Array.new(60) { |i| "/usr/local/bundle/gems/arel/to_sql.rb:#{i}:in `visit'" }
+    app = ["/app/app/services/maintenance.rb:53:in `prune'", "/app/app/services/maintenance.rb:12:in `run'"]
+    trimmed = RubyAPM::Aggregator.trim_backtrace(deep + app + deep)
+    assert_equal deep.first(8), trimmed.first(8)
+    assert_match "library frames omitted", trimmed[8]
+    assert_equal app, trimmed[9, 2]
+    short = deep.first(5)
+    assert_equal short, RubyAPM::Aggregator.trim_backtrace(short)
+  end
+
   def test_ignored_paths_and_unnamed_requests
     run_request(->(_) { [200, {}, []] }, "/assets/app.css")
     run_request(->(_) { [404, {}, []] }, "/nope")
