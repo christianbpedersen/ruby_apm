@@ -14,6 +14,11 @@ module RubyAPM
     end
 
     config.after_initialize do |app|
+      # MySQL quoting rules differ (backslash escapes, "..." strings, # comments).
+      if defined?(::ActiveRecord::Base)
+        adapter = (::ActiveRecord::Base.connection_db_config&.adapter rescue nil).to_s
+        RubyAPM::SqlObfuscator.mysql = adapter.match?(/mysql|trilogy/i)
+      end
       if RubyAPM.start!
         require "ruby_apm/error_subscriber"
         Rails.error.subscribe(RubyAPM::ErrorSubscriber.new) if Rails.respond_to?(:error) && Rails.error.respond_to?(:subscribe)
@@ -23,7 +28,7 @@ module RubyAPM
           n = MethodTracer.auto_instrument(RubyAPM.config.auto_instrument_paths, Rails.root)
           RubyAPM.config.logger&.info("[RubyAPM] auto-instrumented #{n} methods")
         end
-        RubyAPM.config.logger&.info("[RubyAPM] reporting #{RubyAPM.config.app_name} to #{RubyAPM.config.endpoint}")
+        RubyAPM.config.logger&.info("[RubyAPM] reporting #{RubyAPM.config.app_name} to #{RubyAPM.config.safe_endpoint}")
       end
     end
   end

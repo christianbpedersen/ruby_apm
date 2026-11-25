@@ -41,7 +41,8 @@ class SqlObfuscatorLeakTest < Minitest::Test
 
   def test_quotes_inside_comments_and_escapes
     assert_equal "SELECT ? FROM t", obf("SELECT 'a' /* it's */ FROM t")
-    assert_equal "SELECT * FROM t WHERE n = ?", obf("SELECT * FROM t WHERE n = 'O\\'Brien secret'")
+    # Ambiguous between dialects: redacted rather than risk a leak.
+    assert_equal RubyAPM::SqlObfuscator::REDACTED, obf("SELECT * FROM t WHERE n = 'O\\'Brien secret'")
     assert_equal "SELECT * FROM t WHERE n = ?", obf("SELECT * FROM t WHERE n = 'O''Brien'")
   end
 
@@ -59,5 +60,36 @@ class SqlObfuscatorLeakTest < Minitest::Test
     a = RubyAPM::SqlObfuscator.call(big)
     refute RubyAPM::SqlObfuscator.instance_variable_get(:@cache).key?(big)
     assert_equal "INSERT INTO t (a) VALUES (?)", a.sql
+  end
+
+  # Leaks found in the November 2026 security review.
+  def test_backslash_at_end_of_a_standard_string_does_not_leak_the_next_literal
+    out = obf(%q{SELECT * FROM users WHERE path = 'C:\' AND api_token = 'sk_live_SECRET'})
+    refute_includes out, "sk_live_SECRET"
+    out = obf(%q{UPDATE users SET bio = 'ends\', pw = '$2a$12$HASH', email = 'alice@example.com'})
+    refute_match(/HASH|alice/, out)
+  end
+
+  def test_numbers_hex_exponent_and_nested_comments
+    assert_equal "SELECT * FROM t WHERE a = ? AND b = ? AND c = ? AND d = ?", obf("SELECT * FROM t WHERE a = 0xDEADBEEF AND b = 1e10 AND c = 12E-3 AND d = .75")
+    refute_includes obf("SELECT 1 /* outer /* inner */ ssn=123-45-6789 secret */ FROM t"), "secret"
+    assert_equal "SELECT * FROM t WHERE x = ? AND y = ?", obf("SELECT * FROM t WHERE x = $$a$$ AND y = 5")
+  end
+
+  def test_identifiers_with_quotes_fail_closed
+    refute_includes obf(%q{SELECT "o'brien" FROM t WHERE name = 'secretname'}), "secretname"
+  end
+
+  def test_mysql_dialect
+    RubyAPM::SqlObfuscator.mysql = true
+    assert_equal "SELECT * FROM t WHERE email = ? AND n = ?", obf(%q{SELECT * FROM t WHERE email = "alice@example.com" AND n = 'O\'Brien'})
+    refute_includes obf("SELECT * FROM t # password=hunter2\nWHERE a = 1"), "hunter2"
+  ensure
+    RubyAPM::SqlObfuscator.mysql = false
+  end
+
+  def test_scrub_free_text
+    assert_equal "no such column: x: SELECT * FROM users WHERE email = ? AND id = ?",
+                 RubyAPM::SqlObfuscator.scrub("no such column: x: SELECT * FROM users WHERE email = 'bob@example.com' AND id = 42")
   end
 end

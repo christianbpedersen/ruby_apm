@@ -92,7 +92,8 @@ module RubyAPM
           txn.name = GraphQL.transaction_name(queries)
           query = queries.first
           txn.attributes["graphql.operation_type"] = GraphQL.operation_type(query)
-          txn.attributes["graphql.operation_name"] = query&.selected_operation_name if query&.selected_operation_name
+          op_name = GraphQL.operation_name(query)
+          txn.attributes["graphql.operation_name"] = op_name if op_name
           txn.attributes["graphql.queries"] = queries.size if queries.size > 1
         rescue StandardError => e
           Subscribers.warn(e)
@@ -137,12 +138,22 @@ module RubyAPM
         "query"
       end
 
+      VALID_NAME = /\A[_A-Za-z][_0-9A-Za-z]{0,99}\z/
+
+      # Clients choose operation names; anything that isn't a plain GraphQL
+      # name (or is absurdly long) is not trusted as a transaction name.
+      def operation_name(query)
+        name = (query&.selected_operation_name rescue nil)
+        return nil if name.nil?
+        name.to_s.match?(VALID_NAME) ? name.to_s : "<invalid>"
+      end
+
       # GraphQL/query/ProductList, GraphQL/mutation/CreateOrder, or
       # GraphQL/query/<anonymous> for unnamed operations.
       def transaction_name(queries)
         names = queries.map do |q|
           op = operation_type(q)
-          "#{op}/#{(q.selected_operation_name rescue nil) || '<anonymous>'}"
+          "#{op}/#{operation_name(q) || '<anonymous>'}"
         end.uniq
         names.size == 1 ? "GraphQL/#{names.first}" : "GraphQL/multiplex/#{names.first(5).join('+')}"
       end

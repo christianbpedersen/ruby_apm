@@ -8,7 +8,7 @@ every 10 seconds. Nothing is sent per request, and SQL literals never leave
 the process.
 
 ```ruby
-gem "ruby_apm", git: "https://github.com/christianbpedersen/ruby_apm.git", tag: "v0.2.1"
+gem "ruby_apm", git: "https://github.com/christianbpedersen/ruby_apm.git", tag: "v0.2.2"
 
 # config/initializers/ruby_apm.rb
 RubyAPM.configure do |c|
@@ -67,6 +67,7 @@ end
 | `ignore_paths` | `/assets`, `/up`, `/favicon` | |
 | `auto_instrument_paths` | `[]` | e.g. `%w[app/services]` |
 | `instrument_instantiation` | false | split model instantiation out of ActiveRecord time |
+| `error_message_filter` | `nil` | `->(message, error) { … }` to redact exception messages before they ship |
 | `revision` | `RUBY_APM_REVISION`, `REVISION` file or `git rev-parse` | deploy markers |
 
 Every `RUBY_APM_*` variable also accepts its pre-rename `NEW_FENIC_*` name, and
@@ -74,3 +75,18 @@ Every `RUBY_APM_*` variable also accepts its pre-rename `NEW_FENIC_*` name, and
 
 Run the tests with `bundle exec rake test` and the overhead benchmark with
 `bundle exec ruby bench/overhead.rb`.
+
+## What leaves the process
+
+- SQL is shipped obfuscated: string and numeric literals become `?`, comments
+  are dropped. A statement that cannot be parsed with certainty (a quote
+  survives, or it reads differently under MySQL and standard quoting) is
+  replaced by a redaction marker rather than risk a leak.
+- EXPLAIN plans keep the planner's estimates and node structure; every literal
+  is replaced. SQLite uses `EXPLAIN QUERY PLAN`; PostgreSQL EXPLAINs run with
+  a 2 s statement timeout and 200 ms lock timeout.
+- Database exception messages are scrubbed like SQL (PostgreSQL `DETAIL` lines
+  are dropped); other messages pass through `error_message_filter` if set.
+- Request paths and outbound HTTP paths have token-like segments replaced by
+  `:redacted`; query strings, headers, bodies, GraphQL variables and job
+  arguments are never captured.

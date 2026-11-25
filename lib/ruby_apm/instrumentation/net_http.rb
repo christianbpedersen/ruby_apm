@@ -18,7 +18,7 @@ module RubyAPM
           ensure
             txn.finish_segment(segment)
             if segment.in_tree
-              segment.attrs = { "url" => "#{use_ssl? ? 'https' : 'http'}://#{address}:#{port}#{req.path.to_s.split('?').first}",
+              segment.attrs = { "url" => "#{use_ssl? ? 'https' : 'http'}://#{address}:#{port}#{Redact.outbound_path(req.path.to_s.split('?').first)}",
                                 "status" => response&.code }
             end
           end

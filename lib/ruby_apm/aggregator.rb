@@ -132,7 +132,10 @@ module RubyAPM
 
       @mutex.synchronize do
         bucket = (@buckets[minute] ||= Bucket.new({}, {}, {}))
-        name = txn.name
+        # While the server is unreachable nothing drains; keep memory bounded.
+        @buckets.delete(@buckets.keys.min) while @buckets.size > MAX_BUCKETS
+        age_out_names!
+        name = txn.name.to_s[0, MAX_NAME_LENGTH]
         key = [txn.type, name]
         unless bucket.transactions.key?(key) || @names.include?(key)
           if @names.size >= @config.max_transaction_names
@@ -206,7 +209,23 @@ module RubyAPM
       @traces = []
       @slow_queries = []
       @names ||= Set.new
+      @names_since ||= Time.now.to_f
       @pending ||= []
+    end
+
+    MAX_BUCKETS = 30
+    MAX_NAME_LENGTH = 255
+    NAMES_WINDOW = 3_600
+
+    # The distinct-name cap protects against unbounded cardinality, but must
+    # not hold forever: a burst of junk names (e.g. attacker-chosen GraphQL
+    # operation names) would otherwise push every later name into overflow.
+    def age_out_names!
+      now = Time.now.to_f
+      return if now - @names_since < NAMES_WINDOW
+
+      @names = Set.new
+      @names_since = now
     end
 
     private
@@ -247,7 +266,7 @@ module RubyAPM
     def record_error(bucket, txn, name)
       error = txn.error
       klass = error_class(error)
-      message = error.respond_to?(:message) ? error.message.to_s[0, 500] : error.to_s[0, 500]
+      message = Redact.error_message(error, @config)
       key = [txn.type, name, klass, message]
       entry = bucket.errors[key]
       unless entry

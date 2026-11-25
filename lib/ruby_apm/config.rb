@@ -66,6 +66,25 @@ module RubyAPM
       [ENV["RUBY_APM_#{name}"], ENV["NEW_FENIC_#{name}"]].find { |v| v && !v.empty? }
     end
 
+    # Called with (message, exception) for every error message before it is
+    # shipped; return the redacted message.
+    attr_accessor :error_message_filter
+
+    # Never show the key in logs, consoles or error trackers.
+    def inspect
+      "#<RubyAPM::Config app_name=#{app_name.inspect} endpoint=#{safe_endpoint.inspect} enabled=#{enabled?}>"
+    end
+
+    # The endpoint without any user:password part, for log lines.
+    def safe_endpoint
+      uri = URI(endpoint.to_s)
+      uri.user = nil
+      uri.password = nil
+      uri.to_s
+    rescue StandardError
+      "(invalid endpoint)"
+    end
+
     def initialize
       @endpoint = self.class.env("ENDPOINT") || "http://localhost:4400"
       @api_key = self.class.env("API_KEY")

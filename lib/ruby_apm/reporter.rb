@@ -4,6 +4,7 @@ require "zlib"
 require "stringio"
 require "msgpack"
 require "securerandom"
+require "timeout"
 
 module RubyAPM
   # Background thread that periodically drains the aggregator and POSTs one
@@ -32,14 +33,7 @@ module RubyAPM
       @mutex.synchronize do
         return if @pid == Process.pid && @thread&.alive?
 
-        if @pid && @pid != Process.pid
-          # Forked child: drop the parent's half-built state and connection.
-          @aggregator.drain
-          @aggregator.take_slow_queries
-          @aggregator.take_pending
-          @http = nil
-          @runtime = RuntimeSampler.new
-        end
+        reset_after_fork! if forked?
         @pid = Process.pid
         @thread = Thread.new { run }
         @thread.name = "ruby_apm-reporter" if @thread.respond_to?(:name=)
@@ -49,10 +43,19 @@ module RubyAPM
     end
 
     def stop
+      # A forked child that never reported holds a copy of the parent's data
+      # and the parent's socket: flushing would send it twice on a shared TLS
+      # session.
+      return reset_after_fork! if forked?
+
       thread = @thread
       @thread = nil
       thread&.kill
       flush
+    end
+
+    def inspect
+      "#<RubyAPM::Reporter endpoint=#{@config.safe_endpoint.inspect} pid=#{@pid.inspect}>"
     end
 
     def flush
@@ -110,6 +113,23 @@ module RubyAPM
 
     private
 
+    def forked?
+      @pid && @pid != Process.pid
+    end
+
+    # Drop the parent's half-built state and connection.
+    def reset_after_fork!
+      @aggregator.drain
+      @aggregator.take_slow_queries
+      @aggregator.take_pending
+      @http = nil
+      @runtime = RuntimeSampler.new
+      @pid = nil
+      nil
+    end
+
+    MAX_RESPONSE_BYTES = 16_384
+
     def run
       loop do
         sleep @config.flush_interval
@@ -149,18 +169,26 @@ module RubyAPM
       request["Authorization"] = "Bearer #{@config.api_key}"
       request["User-Agent"] = "ruby_apm-ruby/#{VERSION}"
       request.body = body
-      response = http.request(request)
+      # read_timeout bounds each read, not the whole response: a server that
+      # trickles bytes could stall the reporter (and app shutdown) forever.
+      body = +""
+      deadline = @config.open_timeout + @config.read_timeout * 2
+      response = Timeout.timeout(deadline) do
+        http.request(request) do |res|
+          res.read_body { |chunk| body << chunk if body.bytesize < MAX_RESPONSE_BYTES }
+        end
+      end
       return true if response.is_a?(Net::HTTPSuccess)
 
       @stats[:last_error] = "HTTP #{response.code}"
-      log(:warn, "server rejected payload: HTTP #{response.code} #{response.body.to_s[0, 200]}")
+      log(:warn, "server rejected payload: HTTP #{response.code} #{body[0, 200].gsub(/[^[:print:]]/, ' ')}")
       # 4xx other than 429 means the payload itself is bad; retrying will not help.
       code = response.code.to_i
       code.between?(400, 499) && code != 429
     rescue StandardError => e
       @http = nil
       @stats[:last_error] = "#{e.class}: #{e.message}"
-      log(:warn, "could not reach #{@config.endpoint}: #{e.class}: #{e.message}")
+      log(:warn, "could not reach #{@config.safe_endpoint}: #{e.class}")
       false
     end
 

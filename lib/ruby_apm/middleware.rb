@@ -12,7 +12,7 @@ module RubyAPM
       return @app.call(env) unless RubyAPM.started?
       return @app.call(env) if Transaction.current || RubyAPM.config.ignored_path?(env["PATH_INFO"].to_s)
 
-      txn = Transaction.new(type: :web, uri: env["PATH_INFO"])
+      txn = Transaction.new(type: :web, uri: Redact.path(env["PATH_INFO"]))
       txn.queue_time = queue_time(env, txn.started_at)
       Transaction.current = txn
       status = nil
